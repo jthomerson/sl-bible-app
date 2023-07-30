@@ -1,0 +1,7 @@
+{
+  "name": "sl-bible-app",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "vue-vite"
+}
