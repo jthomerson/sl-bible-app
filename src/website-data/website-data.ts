@@ -79,7 +79,9 @@ export default class WebsiteData {
     }
 
     public getBibleMediaURL(type: 'MP4' | 'MP3', langCode: string, book: number, chap: number): string {
-        return `https://b.jw-cdn.org/apis/pub-media/GETPUBMEDIALINKS?booknum=${book}&output=json&pub=nwt&fileformat=${type}&alllangs=0&track=${chap}&langwritten=${langCode}&txtCMSLang=E`;
+        const fileTypes = (type === 'MP4' ? 'MP4,M4V' : type);
+
+        return `https://b.jw-cdn.org/apis/pub-media/GETPUBMEDIALINKS?booknum=${book}&output=json&pub=nwt&fileformat=${fileTypes}&alllangs=0&track=${chap}&langwritten=${langCode}&txtCMSLang=E`;
     }
 
     public async getAvailableBooks(): Promise<BibleBook[]> {
@@ -146,8 +148,8 @@ export default class WebsiteData {
             this.getPubMedia('MP3', this._spokenLang.code, book, chap),
         ]);
 
-        const signedFiles = signedData.files[this._signedLang.code].MP4,
-            spokenFiles = spokenData.files[this._spokenLang.code].MP3,
+        const signedFiles = (signedData.files[this._signedLang.code].MP4 || signedData.files[this._signedLang.code].M4V || []),
+            spokenFiles = (spokenData.files[this._spokenLang.code].MP3 || []),
             vidFile = this.findBestFile(signedFiles, 'MP4'),
             audFile = this.findBestFile(spokenFiles, 'MP3');
 
