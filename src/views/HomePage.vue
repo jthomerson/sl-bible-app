@@ -65,14 +65,14 @@
               <button @click.stop="changeMarkerByIncrement(-1)">
                 Prev
               </button>
-              <button @click.stop="seekVideo(-5)">
+              <button @click.stop="controller?.seekByIncrement(-5)">
                 -5s
               </button>
               <button @click.stop="playPause()">
                 <span v-if="playbackStatus.playing">Pause</span>
                 <span v-if="!playbackStatus.playing">Play</span>
               </button>
-              <button @click.stop="seekVideo(+15)">
+              <button @click.stop="controller?.seekByIncrement(+15)">
                 +15s
               </button>
               <button @click.stop="changeMarkerByIncrement(+1)">
@@ -119,27 +119,9 @@
 <script setup lang="ts">
 import { IonContent, IonHeader, IonPage, IonTitle, IonToolbar } from '@ionic/vue';
 import WebsiteData, { BibleBook, MatchedMarker, MediaData } from '@/website-data/website-data';
+import { emptyPlaybackStatus, MediaPlaybackStatus, PlaybackController } from '@/playback-controllers/playback-controller';
+import FunnySpeechController from '@/playback-controllers/FunnySpeechController';
 import { Ref, ref, onMounted, watch } from 'vue';
-
-interface MediaPlaybackStatus {
-  playing: boolean;
-  videoTime: number;
-  audioTime: number;
-  videoPlaybackRate: number;
-  audioPlaybackRate: number;
-  currentMarker?: MatchedMarker;
-}
-
-function emptyPlaybackStatus(): MediaPlaybackStatus {
-  return {
-    playing: false,
-    videoTime: 0,
-    audioTime: 0,
-    videoPlaybackRate: 1,
-    audioPlaybackRate: 1,
-    currentMarker: undefined,
-  };
-}
 
 const PLAYER_DEBUG_MODE = false;
 
@@ -154,11 +136,12 @@ const data = new WebsiteData(),
       playbackStatus: Ref<MediaPlaybackStatus> = ref(emptyPlaybackStatus()),
       videoEl = ref<HTMLVideoElement>(),
       audioEl = ref<HTMLAudioElement>(),
-      mediaPlayerOverlay = ref<HTMLDivElement>();
-
-let audioPlaybackRateAdjustmentsPaused = false;
+      mediaPlayerOverlay = ref<HTMLDivElement>(),
+      controller = ref<PlaybackController | undefined>();
 
 function playPause() {
+  // control the audio player because mobile devices require a user event to trigger audio
+  // playback, whereas the muted video player can be played/paused without user events
   if (playbackStatus.value.playing) {
     audioEl.value?.pause();
   } else {
@@ -167,7 +150,7 @@ function playPause() {
 }
 
 function changeMarkerByIncrement(inc: number) {
-  if (!playerData.value || !playbackStatus.value || !playbackStatus.value.currentMarker) {
+  if (!controller.value || !playerData.value || !playbackStatus.value.currentMarker) {
     return;
   }
 
@@ -178,22 +161,7 @@ function changeMarkerByIncrement(inc: number) {
     return;
   }
 
-  return jumpToMarker(playerData.value.markers[desiredMarkerInd]);
-}
-
-function seekVideo(v: number) {
-  if (!videoEl.value) {
-    return;
-  }
-
-  const desiredTime = videoEl.value.currentTime + v;
-
-  videoEl.value.currentTime = Math.max(0, Math.min(desiredTime, videoEl.value.duration));
-  // Updating the audio playback rate also seeks it to the proper location if it's not
-  // close (within one second), so we take advantage of that here.
-  // TODO: probably need to make this adjustment happen at the next time update from the
-  // audio player so that we know it actually finished its seek:
-  updateAudioPlaybackRate();
+  return controller.value.jumpToMarker(playerData.value.markers[desiredMarkerInd]);
 }
 
 function toggleOverlay() {
@@ -205,71 +173,21 @@ function toggleOverlay() {
 }
 
 function updateVideoPlaybackRate(inc: number) {
-  if (!videoEl.value) {
+  if (!controller.value) {
     return;
   }
 
-  videoEl.value.playbackRate = videoEl.value.playbackRate + inc;
-  playbackStatus.value.videoPlaybackRate = videoEl.value.playbackRate;
-  updateAudioPlaybackRate();
+  controller.value.incrementPlaybackRate(inc);
 }
 
 function jumpToMarker(mrkr: MatchedMarker): void {
-  if (!videoEl.value || !audioEl.value) {
+  if (!controller.value) {
     return;
   }
 
-  audioPlaybackRateAdjustmentsPaused = true;
-  playbackStatus.value.currentMarker = mrkr;
-  videoEl.value.currentTime = mrkr.signed.start;
-  audioEl.value.currentTime = mrkr.spoken.start;
-  audioPlaybackRateAdjustmentsPaused = false;
-  // TODO: probably need to make this adjustment happen at the next time update from the
-  // audio player so that we know it actually finished its seek:
-  updateAudioPlaybackRate();
+  controller.value.jumpToMarker(mrkr);
 }
 
-function updateAudioPlaybackRate(): void {
-  if (audioPlaybackRateAdjustmentsPaused) {
-    return;
-  }
-
-  const $vid = videoEl.value,
-    $aud = audioEl.value,
-    marker = playbackStatus.value.currentMarker;
-
-  if (!$vid || !$aud || !marker) {
-    return;
-  }
-
-  const vidPast = $vid.currentTime - marker.signed.start,
-    vidDuration = marker.signed.end - marker.signed.start,
-    vidPastPctg = vidPast / vidDuration,
-    audPast = $aud.currentTime - marker.spoken.start,
-    audDuration = marker.spoken.end - marker.spoken.start,
-    audPastPctg = audPast / audDuration,
-    audExpectedTime = (audDuration * vidPastPctg) + marker.spoken.start,
-    // see if the audio is within one second (on either side)
-    // of where this audio marker should start
-    isAudioClose = ($aud.currentTime >= (audExpectedTime - 1)) && ($aud.currentTime <= (audExpectedTime + 1));
-
-  console.debug(`vid at ${$vid.currentTime.toFixed(2)} of ${marker.signed.start.toFixed(2)}-${marker.signed.end.toFixed(2)} (${(vidPastPctg * 100).toFixed(2)}% of ${vidDuration.toFixed(2)} sec); aud at ${$aud.currentTime.toFixed(2)} (expected ${audExpectedTime.toFixed(2)}) of ${marker.spoken.start.toFixed(2)}-${marker.spoken.end.toFixed(2)} (${(audPastPctg * 100).toFixed(2)}% of ${audDuration.toFixed(2)} sec)`);
-
-  if (!isAudioClose) {
-    console.info(`audio was not close: at ${$aud.currentTime}, expected ${audExpectedTime}, so seeking`);
-    $aud.currentTime = audExpectedTime;
-  }
-
-  const vidRemaining = marker.signed.end - $vid.currentTime,
-  audRemaining = marker.spoken.end - $aud.currentTime,
-  playbackRate = (audRemaining / vidRemaining) * $vid.playbackRate;
-
-  if (playbackRate !== Infinity) {
-    console.debug(`Updating audio playback rate to ${playbackRate}`);
-    $aud.playbackRate = playbackRate;
-    playbackStatus.value.audioPlaybackRate = playbackRate;
-  }
-}
 
 // Everything in the <script> tag is basically "onInitialize" so will not run again if we
 // navigate back to this page. To have things run again, use onMounted.
@@ -301,45 +219,8 @@ watch([ videoEl, audioEl ], () => {
   // TODO: not sure why the HTML controls="false" isn't working ...
   $vid.controls = false;
 
-  $aud.addEventListener('timeupdate', () => { playbackStatus.value.audioTime = $aud.currentTime; })
-  $vid.addEventListener('timeupdate', () => {
-    playbackStatus.value.videoTime = $vid.currentTime;
-
-    if (!playerData.value?.markers) {
-      return;
-    }
-
-    const marker = playerData.value.markers.find((m) => {
-      return $vid.currentTime >= m.signed.start && $vid.currentTime < m.signed.end;
-    });
-
-    if (marker !== playbackStatus.value.currentMarker) {
-
-      if (!marker) {
-        return;
-      }
-
-      playbackStatus.value.currentMarker = marker;
-      updateAudioPlaybackRate();
-    }
-  });
-
-  $vid.addEventListener('play', () => {
-    playbackStatus.value.playing = true;
-  });
-  $aud.addEventListener('play', () => {
-    playbackStatus.value.playing = true;
-    $vid.play();
-  });
-
-  $vid.addEventListener('pause', () => {
-    playbackStatus.value.playing = false;
-  });
-  $aud.addEventListener('pause', () => {
-    playbackStatus.value.playing = false;
-    $vid.pause();
-  });
-
+  console.debug(`video/audio element changes - instantiating controller`, JSON.stringify(playbackStatus));
+  controller.value = new FunnySpeechController($vid, $aud, playbackStatus, playerData);
 });
 
 watch([ selectedBook ], () => {
@@ -363,20 +244,21 @@ watch([ selectedBook ], () => {
 });
 
 watch([ selectedBook, selectedChapter ], async () => {
-  console.info(`watch called ${selectedBook.value?.name} ${selectedChapter.value}`);
+  console.debug(`watch called ${selectedBook.value?.name} ${selectedChapter.value}`);
   if (!selectedBook.value || !selectedChapter.value) {
-    console.info('remove player data');
+    console.debug('remove player data');
     playerData.value = undefined;
+    playbackStatus.value = emptyPlaybackStatus();
     return;
   }
 
-  console.info('start loading player data');
+  console.debug('start loading player data');
   loading.value = true;
 
   const mediaData = await data.getMediaData(selectedBook.value.num, selectedChapter.value);
 
-  console.info('finish loading player data');
-  console.info('mediaData', mediaData);
+  console.debug('finish loading player data');
+  console.debug('mediaData', mediaData);
 
   loading.value = false;
   playerData.value = mediaData;
