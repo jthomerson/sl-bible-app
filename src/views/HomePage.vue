@@ -45,7 +45,7 @@
           <div class="videoPlayer" v-if="playerData">
             <video ref="videoEl"
               playsinline muted controls="false"
-              poster="https://placebear.com/1920/1080"
+              poster="./images/video-placeholder.jpg"
               v-bind:src="playerData.signed.url"
             ></video>
             <audio ref="audioEl"
