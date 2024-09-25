@@ -121,7 +121,7 @@ import { IonContent, IonHeader, IonPage, IonTitle, IonToolbar } from '@ionic/vue
 import WebsiteData, { BibleBook, MatchedMarker, MediaData } from '@/website-data/website-data';
 import { emptyPlaybackStatus, MediaPlaybackStatus, PlaybackController } from '@/playback-controllers/playback-controller';
 import FunnySpeechController from '@/playback-controllers/FunnySpeechController';
-import { Ref, ref, onMounted, watch } from 'vue';
+import { Ref, ref, onMounted, watch, reactive } from 'vue';
 
 const PLAYER_DEBUG_MODE = false;
 
@@ -133,7 +133,7 @@ const data = new WebsiteData(),
       availableChapters: Ref<number[]> = ref([]),
       selectedChapter: Ref<number | undefined> = ref(),
       playerData: Ref<MediaData | undefined> = ref(),
-      playbackStatus: Ref<MediaPlaybackStatus> = ref(emptyPlaybackStatus()),
+      playbackStatus: MediaPlaybackStatus = reactive(emptyPlaybackStatus()),
       videoEl = ref<HTMLVideoElement>(),
       audioEl = ref<HTMLAudioElement>(),
       mediaPlayerOverlay = ref<HTMLDivElement>(),
@@ -142,7 +142,7 @@ const data = new WebsiteData(),
 function playPause() {
   // control the audio player because mobile devices require a user event to trigger audio
   // playback, whereas the muted video player can be played/paused without user events
-  if (playbackStatus.value.playing) {
+  if (playbackStatus.playing) {
     audioEl.value?.pause();
   } else {
     audioEl.value?.play();
@@ -150,11 +150,11 @@ function playPause() {
 }
 
 function changeMarkerByIncrement(inc: number) {
-  if (!controller.value || !playerData.value || !playbackStatus.value.currentMarker) {
+  if (!controller.value || !playerData.value || !playbackStatus.currentMarker) {
     return;
   }
 
-  const currentMarkerInd = playerData.value.markers.indexOf(playbackStatus.value.currentMarker),
+  const currentMarkerInd = playerData.value.markers.indexOf(playbackStatus.currentMarker),
         desiredMarkerInd = currentMarkerInd >= 0 ? (currentMarkerInd + inc) : -1;
 
   if (desiredMarkerInd < 0 || desiredMarkerInd >= playerData.value.markers.length) {
@@ -248,7 +248,7 @@ watch([ selectedBook, selectedChapter ], async () => {
   if (!selectedBook.value || !selectedChapter.value) {
     console.debug('remove player data');
     playerData.value = undefined;
-    playbackStatus.value = emptyPlaybackStatus();
+    Object.assign(playbackStatus, emptyPlaybackStatus());
     return;
   }
 

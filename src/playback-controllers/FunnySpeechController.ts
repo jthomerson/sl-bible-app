@@ -6,11 +6,11 @@ export default class FunnySpeechController implements PlaybackController {
 
   private _videoEl: HTMLVideoElement;
   private _audioEl: HTMLAudioElement;
-  private _status: Ref<MediaPlaybackStatus>;
+  private _status: MediaPlaybackStatus;
   private _playerData: Ref<MediaData | undefined>;
   private _rateAdjustmentPaused: boolean = false;
 
-  public constructor(videoEl: HTMLVideoElement, audioEl: HTMLAudioElement, status: Ref<MediaPlaybackStatus>, playerData: Ref<MediaData | undefined>) {
+  public constructor(videoEl: HTMLVideoElement, audioEl: HTMLAudioElement, status: MediaPlaybackStatus, playerData: Ref<MediaData | undefined>) {
     this._videoEl = videoEl;
     this._audioEl = audioEl;
     this._status = status;
@@ -22,10 +22,10 @@ export default class FunnySpeechController implements PlaybackController {
     const self = this;
 
     self._audioEl.addEventListener('timeupdate', () => {
-      self._status.value.audioTime = self._audioEl.currentTime;
+      self._status.audioTime = self._audioEl.currentTime;
     });
     self._videoEl.addEventListener('timeupdate', () => {
-      self._status.value.videoTime = self._videoEl.currentTime;
+      self._status.videoTime = self._videoEl.currentTime;
 
       if (!self._playerData.value?.markers) {
         return;
@@ -35,30 +35,30 @@ export default class FunnySpeechController implements PlaybackController {
         return self._videoEl.currentTime >= m.signed.start && self._videoEl.currentTime < m.signed.end;
       });
 
-      if (marker !== self._status.value.currentMarker) {
+      if (marker !== self._status.currentMarker) {
 
         if (!marker) {
           return;
         }
 
-        self._status.value.currentMarker = marker;
+        self._status.currentMarker = marker;
         self._updateAudioPlaybackRate();
       }
     });
 
     self._videoEl.addEventListener('play', () => {
-      self._status.value.playing = true;
+      self._status.playing = true;
     });
     self._audioEl.addEventListener('play', () => {
-      self._status.value.playing = true;
+      self._status.playing = true;
       self._videoEl.play();
     });
 
     self._videoEl.addEventListener('pause', () => {
-      self._status.value.playing = false;
+      self._status.playing = false;
     });
     self._audioEl.addEventListener('pause', () => {
-      self._status.value.playing = false;
+      self._status.playing = false;
       self._videoEl.pause();
     });
   }
@@ -66,7 +66,7 @@ export default class FunnySpeechController implements PlaybackController {
   jumpToMarker(mrkr: MatchedMarker): void {
     console.debug(`jumpToMarker("${mrkr.id}": ${mrkr.label}) -- ${JSON.stringify(this._status)}`);
     this._rateAdjustmentPaused = true;
-    this._status.value.currentMarker = mrkr;
+    this._status.currentMarker = mrkr;
     this._videoEl.currentTime = mrkr.signed.start;
     this._audioEl.currentTime = mrkr.spoken.start;
     this._rateAdjustmentPaused = false;
@@ -77,7 +77,7 @@ export default class FunnySpeechController implements PlaybackController {
 
   incrementPlaybackRate(v: number): void {
     this._videoEl.playbackRate = this._videoEl.playbackRate + v;
-    this._status.value.videoPlaybackRate = this._videoEl.playbackRate;
+    this._status.videoPlaybackRate = this._videoEl.playbackRate;
     this._updateAudioPlaybackRate();
   }
 
@@ -93,13 +93,13 @@ export default class FunnySpeechController implements PlaybackController {
   }
 
   private _updateAudioPlaybackRate() {
-    if (this._rateAdjustmentPaused || !this._status.value.currentMarker) {
+    if (this._rateAdjustmentPaused || !this._status.currentMarker) {
       return;
     }
 
     const $vid = this._videoEl,
       $aud = this._audioEl,
-      mrkr = this._status.value.currentMarker,
+      mrkr = this._status.currentMarker,
       vidPast = $vid.currentTime - mrkr.signed.start,
       vidDuration = mrkr.signed.end - mrkr.signed.start,
       vidPastPctg = vidPast / vidDuration,
@@ -125,7 +125,7 @@ export default class FunnySpeechController implements PlaybackController {
     if (playbackRate !== Infinity) {
       console.debug(`Updating audio playback rate to ${playbackRate}`);
       $aud.playbackRate = playbackRate;
-      this._status.value.audioPlaybackRate = playbackRate;
+      this._status.audioPlaybackRate = playbackRate;
     }
   }
 }
