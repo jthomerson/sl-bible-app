@@ -3,10 +3,14 @@ import { PlaybackController, MediaPlaybackStatus } from './playback-controller';
 import { Ref, watch } from 'vue';
 
 /**
- * This controller favors video speed over audio speed, and adjusts the audio speed to
- * make the audio marker boundaries basically match the video marker boundaries.
+ * This controller allows the user to control video speed, and will play the audio at 1.0x
+ * speed unless it must be sped up to fit within the alloted time of the matching video
+ * marker. So, what will generally happen is that the audio will play, and then pause
+ * while the video finishes the corresponding marker (catching up), and then the audio
+ * will resume at 1.0x. However, if the video marker is shorter than the audio marker, the
+ * audio will be played fast enough to end the marker at the same time the video does.
  */
-export default class FunnySpeechController implements PlaybackController {
+export default class NormalSpeechController implements PlaybackController {
 
   private _videoEl: HTMLVideoElement;
   private _audioEl: HTMLAudioElement;
@@ -40,7 +44,6 @@ export default class FunnySpeechController implements PlaybackController {
       });
 
       if (marker !== self._status.currentMarker) {
-
         if (!marker) {
           return;
         }
